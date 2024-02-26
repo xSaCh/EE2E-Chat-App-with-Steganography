@@ -1,3 +1,5 @@
+from datetime import datetime
+from fastapi import WebSocket
 from pydantic import BaseModel
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -25,3 +27,10 @@ class UserInDB(UserBase):
 #     username: str
 #     password: str
     # public_key: str | None = None
+
+
+# class WSConnection(BaseModel):
+#     username: str
+#     wssocket: WebSocket | None = None
+#     connection_on: datetime = datetime.now()
+#     # is_active: bool = True

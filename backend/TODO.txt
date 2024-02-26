@@ -1,0 +1,20 @@
+== Missing ==
+Backend:
+    refresh token
+    signout api route
+    user session 
+    
+Frontend:
+    token storage
+    private key storage
+
+== To Implement ==
+Backend:
+    Database integration
+    Public keys storage
+
+
+== WS ==
+Send text 'aa' to username
+Recv text 'aa' from username
+{'type':recv|send,'msg':'texy',timestamp:time,'username':username}
