@@ -1,15 +1,19 @@
 import asyncio
+from functools import reduce
 import json
 from operator import contains
 from threading import Thread
 import time
+from urllib import request
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.datastructures import FormData
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import requests
 from app.models.users import *
 import app.util as util
 import app.db.localDb
@@ -28,13 +32,6 @@ db = app.db.localDb.LocalDb()
 wsMan = WSManager()
 msgQueue = []
 
-# async def a():
-#     current_user = await get_current_user("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiYmIiLCJleHAiOjE3MDgzNjMwOTF9.XXHL9iA4EGFVvms27Yi3h5ABLuj_TXeaQxTng_6AgKU")
-#     print("AAA ", current_user)
-
-# # asyncio.create_task(a())
-# asyncio.get_event_loop().run_until_complete(a())
-
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -49,8 +46,11 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                         detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
+    credential_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str | None = payload.get("sub")
@@ -80,7 +80,7 @@ async def get_current_active_user(current_user: UserInDB = Depends(get_current_u
 @fastApp.post("/register")
 async def register_user(registerUser: UserInDB):
     isAlready = not db.addRegisterUser(registerUser)
-    print(registerUser)
+    print(f"REG {registerUser}")
     if isAlready:
         raise HTTPException(status_code=400, detail="User ALready Exist")
     return "Lol"
@@ -90,12 +90,16 @@ async def register_user(registerUser: UserInDB):
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = db.authenticate_user(form_data.username, form_data.password)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires)
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
 
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -111,20 +115,20 @@ async def read_own_items(current_user: UserBase = Depends(get_current_active_use
 
 
 @fastApp.get("/user/{username}/publickey")
-async def get_user_public_key(username, user: UserInDB = Depends(get_current_active_user)):
+async def get_user_public_key(
+    username, user: UserInDB = Depends(get_current_active_user)
+):
     print(username)
     recUser = db.get_user(username)
     if not recUser:
-        raise HTTPException(
-            status_code=400, detail="Invalid Receiver username")
+        raise HTTPException(status_code=400, detail="Invalid Receiver username")
     return {"publicKey": recUser.publicKeyStr, "username": recUser.username}
 
 
 @fastApp.websocket("/ws")
 async def chat_user(socket: WebSocket, token: str = Query(...)):
     try:
-        current_user: UserInDB = await get_current_user(token)
-        print(f"{current_user}")
+        current_user: UserInDB = await get_current_user(token)  # type: ignore
         # if not isinstance(current_user, UserInDB):
         #     print(f"Disconnect {current_user}")
         #     await socket.close()
@@ -142,17 +146,22 @@ async def chat_user(socket: WebSocket, token: str = Query(...)):
             data = await socket.receive_text()
             print(f"Current User {current_user.username} {data}")
             recData = json.loads(data)
-            if ("to" not in recData) or ("msg" not in recData) or ("timestamp" not in recData):
-                print(recData)
+            if (
+                ("to" not in recData)
+                or ("msg" not in recData)
+                or ("timestamp" not in recData)
+            ):
+                print("Invalid DATA ", recData)
                 continue
 
-            recData.update({'from': current_user.username})
-            recSock = wsMan.getUserSocket(recData['to'])
-            recDb = db.get_user(recData['to'])
+            recData.update({"from": current_user.username})
+            recSock = wsMan.getUserSocket(recData["to"])
+            recDb = db.get_user(recData["to"])
             if not recSock:
                 if not recDb:
                     print("User not found")
                 else:
+                    print("Msg Queue Add")
                     msgQueue.append(recData)
                 continue
 
@@ -162,23 +171,47 @@ async def chat_user(socket: WebSocket, token: str = Query(...)):
         except Exception as e:
             print(e)
             if type(e) != json.decoder.JSONDecodeError:
+                # print(socket.conn)
+                print(socket in wsMan.connections)
+                wsMan.removeSocket(socket)
                 break
             pass
+    print(
+        f"{socket in wsMan.connections} {list(filter(lambda z: socket == z[1] ,wsMan.userCon.items()))}"
+    )
 
 
 async def check_msg_queue():
     sendedIndx = []
     for i in range(len(msgQueue)):
-        recSock = wsMan.getUserSocket(msgQueue[i]['to'])
+        recSock = wsMan.getUserSocket(msgQueue[i]["to"])
         if recSock:
             print("te")
             await recSock.send_text(json.dumps(msgQueue[i]))
             sendedIndx.append(i)
 
     for i in sendedIndx:
+        # error here
         msgQueue.pop(i)
 
 
-# t = Thread(target=check_msg_queue)
-# t.start()
-# t = asyncio.create_task(check_msg_queue())
+@fastApp.get("/{username}")
+async def getUser(username):
+    print(username)
+    if username not in ("aab", "bbb"):
+        raise HTTPException(status_code=404)
+
+    user = db.authenticate_user(username, "aab" if username == "aab" else "bb")
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}

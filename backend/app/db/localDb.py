@@ -52,7 +52,6 @@ class LocalDb(object):
     def get_user(self, username: str):
         for u in self.users:
             if u.username == username:
-                print(u)
                 return u
         return None
 

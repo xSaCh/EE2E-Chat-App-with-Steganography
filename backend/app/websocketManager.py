@@ -1,26 +1,7 @@
 from datetime import datetime
 from fastapi import WebSocket
+
 # from app.models.users import UserBase, WSConnection
-
-
-# class WSManager(object):
-#     def __init(self):
-#         self.activeconnection: list[WSConnection] = []
-
-#     def getUserConnection(self, username: str) -> WSConnection | None:
-#         for c in self.activeconnection:
-#             if c.username == username:
-#                 return c
-
-#         return None
-
-#     def createConnection(self, username: str, sk: WebSocket):
-#         if self.getUserConnection(username):
-#             return False
-#         self.activeconnection.append(WSConnection(
-#             username=username,  connection_on=datetime.now()))
-
-#         return True
 
 
 class WSManager:
@@ -29,9 +10,22 @@ class WSManager:
         self.userCon: dict[str, WebSocket] = {}
 
     async def connect(self, username: str, websocket: WebSocket):
+        existingUser = self.getUserSocket(username)
+        if existingUser:
+            self.removeSocket(existingUser)
+
         await websocket.accept()
         self.connections.append(websocket)
         self.userCon[username] = websocket
+
+    def removeSocket(self, socket: WebSocket):
+        if socket in self.connections:
+            self.connections.remove(socket)
+
+        for k, v in self.userCon.items():
+            if v == socket:
+                self.userCon.pop(k)
+                return
 
     async def broadcast(self, data: str):
         for connection in self.connections:

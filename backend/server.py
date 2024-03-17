@@ -5,6 +5,6 @@ if __name__ == "__main__":
         "app.app:fastApp",
         host="127.0.0.1",
         port=8080,
-        log_level="debug",
+        log_level="info",
         reload=True
     )

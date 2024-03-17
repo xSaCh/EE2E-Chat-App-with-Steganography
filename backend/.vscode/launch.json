@@ -12,7 +12,9 @@
             "args": [
                 "app.app:fastApp",
                 "--log-level",
-                "debug",
+                "info",
+                "--port",
+                "8080",
                 "--reload"
             ],
             "jinja": true

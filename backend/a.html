@@ -1,81 +1,86 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Chat</title>
-  </head>
-  <body>
-    <h1>WebSocket Chat</h1>
-    <form action="" onsubmit="connect(event)">
-      <input type="text" id="tokenT" autocomplete="off" />
-      <label for="recUser"></label>
-      <input type="text" id="recUser" autocomplete="off" />
-      <button>Connect</button>
-    </form>
-    <form action="" onsubmit="sendMessage(event)" id="form">
-      >
-      <input type="text" id="messageText" autocomplete="off" />
-      <button>Send</button>
-    </form>
-    <ul id="messages"></ul>
-    <script>
-      var clientID = Date.now();
-      var ws = null;
-      function connect(e) {
-        e.preventDefault();
-        tokn = document.getElementById("tokenT").value;
-        ws = new WebSocket(`ws://127.0.0.1:8080/ws?token=${tokn}`);
-        ws.onmessage = processMessage;
-        ws.onerror = (err) => console.log(err);
+
+<head>
+  <title>Chat</title>
+</head>
+
+<body>
+  <h1>WebSocket Chat</h1>
+  <form action="" onsubmit="connect(event)">
+    <input type="text" id="tokenT" autocomplete="off" />
+    <label for="recUser"></label>
+    <input type="text" id="recUser" autocomplete="off" />
+    <button>Connect</button>
+  </form>
+  <form action="" onsubmit="sendMessage(event)" id="form">
+    >
+    <input type="text" id="messageText" autocomplete="off" />
+    <button>Send</button>
+  </form>
+  <ul id="messages"></ul>
+  <script>
+    var clientID = Date.now();
+    var ws = null;
+    function connect(e) {
+      e.preventDefault();
+      tokn = document.getElementById("tokenT").value;
+      ws = new WebSocket(`ws://127.0.0.1:8080/ws?token=${tokn}`);
+      ws.onmessage = processMessage;
+      ws.onerror = (err) => console.log("ERRRO ", err);
+    }
+
+    function processMessage(event) {
+      var messages = document.getElementById("messages");
+      var message = document.createElement("li");
+      let data = null;
+      try {
+        data = JSON.parse(event.data);
+        console.log(data);
+        var content = document.createTextNode(
+          `${data.from} said '${data.msg}' on ${new Date(data.timestamp)}`
+        );
+      } catch (error) {
+        var content = document.createTextNode(event.data);
       }
 
-      function processMessage(event) {
-        var messages = document.getElementById("messages");
-        var message = document.createElement("li");
-        let data = null;
-        try {
-          data = JSON.parse(event.data);
-          console.log(data);
-          var content = document.createTextNode(
-            `${data.from} said '${data.msg}' on ${data.timestamp}`
-          );
-        } catch (error) {
-          var content = document.createTextNode(event.data);
-        }
+      message.appendChild(content);
+      messages.appendChild(message);
+    }
 
-        message.appendChild(content);
-        messages.appendChild(message);
-      }
-
-      function sendMessage(event) {
-        event.preventDefault();
-        var input = document.getElementById("messageText");
-        var recUserName = document.getElementById("recUser").value;
-        var message = document.createElement("li");
-        var content = document.createTextNode(input.value);
-        message.appendChild(content);
-        messages.appendChild(message);
-        console.log({
+    function sendMessage(event) {
+      event.preventDefault();
+      var input = document.getElementById("messageText");
+      var recUserName = document.getElementById("recUser").value;
+      var message = document.createElement("li");
+      var content = document.createTextNode(input.value);
+      message.appendChild(content);
+      messages.appendChild(message);
+      console.log({
+        to: recUserName,
+        msg: input.value,
+        // timestamp: new Date().toJSON(),
+        timestamp: new Date().getTime(),
+      });
+      ws.send(
+        JSON.stringify({
           to: recUserName,
           msg: input.value,
-          timestamp: new Date().toJSON(),
-        });
-        ws.send(
-          JSON.stringify({
-            to: recUserName,
-            msg: input.value,
-            timestamp: new Date().toJSON(),
-          })
-        );
+          // timestamp: new Date().toJSON(),
+          timestamp: new Date().getTime(),
+        })
+      );
 
-        input.value = "";
-      }
+      input.value = "";
+    }
 
-      function showForm(event) {
-        var button = document.getElementById("connect");
-        var form = document.getElementById("form");
-        button.style.display = "none";
-        form.style.display = "block";
-      }
-    </script>
-  </body>
+    function showForm(event) {
+      var button = document.getElementById("connect");
+      var form = document.getElementById("form");
+      button.style.display = "none";
+      form.style.display = "block";
+    }
+  </script>
+</body>
+
 </html>
