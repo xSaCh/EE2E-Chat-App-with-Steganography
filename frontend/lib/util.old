@@ -1,0 +1,74 @@
+
+Uint8List _decodePEM(String pem) {
+  var startsWith = [
+    "-----BEGIN PUBLIC KEY-----",
+    "-----BEGIN PRIVATE KEY-----",
+    "-----BEGIN PGP PUBLIC KEY BLOCK-----\r\nVersion: React-Native-OpenPGP.js 0.1\r\nComment: http://openpgpjs.org\r\n\r\n",
+    "-----BEGIN PGP PRIVATE KEY BLOCK-----\r\nVersion: React-Native-OpenPGP.js 0.1\r\nComment: http://openpgpjs.org\r\n\r\n",
+  ];
+  var endsWith = [
+    "-----END PUBLIC KEY-----",
+    "-----END PRIVATE KEY-----",
+    "-----END PGP PUBLIC KEY BLOCK-----",
+    "-----END PGP PRIVATE KEY BLOCK-----",
+  ];
+  bool isOpenPgp = pem.contains('BEGIN PGP');
+
+  for (var s in startsWith) {
+    if (pem.startsWith(s)) {
+      pem = pem.substring(s.length);
+    }
+  }
+
+  for (var s in endsWith) {
+    if (pem.endsWith(s)) {
+      pem = pem.substring(0, pem.length - s.length);
+    }
+  }
+
+  if (isOpenPgp) {
+    var index = pem.indexOf('\r\n');
+    pem = pem.substring(0, index);
+  }
+
+  pem = pem.replaceAll('\n', '');
+  pem = pem.replaceAll('\r', '');
+
+  return base64.decode(pem);
+}
+
+String encodePublicKeyToPem(RSAPublicKey publicKey) {
+  const BEGIN_PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----';
+  const END_PUBLIC_KEY = '-----END PUBLIC KEY-----';
+
+// Create the top level sequence
+  var topLevelSeq = ASN1Sequence();
+
+// Create the sequence holding the algorithm information
+  var modulus = ASN1Integer(publicKey.modulus);
+  var exponent = ASN1Integer(publicKey.exponent);
+
+  topLevelSeq.add(modulus);
+  topLevelSeq.add(exponent);
+  topLevelSeq.encode(encodingRule: ASN1EncodingRule.ENCODING_DER);
+// Encode base64
+  var dataBase64 = base64.encode(topLevelSeq.encodedBytes!);
+
+// print('$BEGIN_PUBLIC_KEY\n${chunks.join('\n')}\n$END_PUBLIC_KEY');
+  return '$BEGIN_PUBLIC_KEY\n${dataBase64}\n$END_PUBLIC_KEY';
+}
+
+RSAPublicKey decodePemKey(String pemString) {
+  Uint8List publicKeyDER = _decodePEM(pemString);
+  var asn1Parser = ASN1Parser(publicKeyDER);
+  var topLevelSeq = asn1Parser.nextObject() as ASN1Sequence;
+  var modulus = topLevelSeq.elements![0] as ASN1Integer;
+  var exponent = topLevelSeq.elements![1] as ASN1Integer;
+
+  // var publicKeyAsn = new ASN1Parser(publicKeyBitString.contentBytes());
+  // ASN1Sequence publicKeySeq = publicKeyAsn.nextObject();
+
+  RSAPublicKey rsaPublicKey = RSAPublicKey(modulus.integer!, exponent.integer!);
+
+  return rsaPublicKey;
+}

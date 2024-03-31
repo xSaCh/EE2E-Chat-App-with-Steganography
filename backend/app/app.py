@@ -1,13 +1,27 @@
 import asyncio
 from functools import reduce
+import hashlib
+from http import HTTPStatus
 import json
 from operator import contains
+import os
 from threading import Thread
 import time
 from urllib import request
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
+import uuid
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.datastructures import FormData
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -125,6 +139,41 @@ async def get_user_public_key(
     return {"publicKey": recUser.publicKeyStr, "username": recUser.username}
 
 
+@fastApp.post("/attachment/")
+async def upload(
+    file: UploadFile = File(...), user: UserInDB = Depends(get_current_active_user)
+):
+    try:
+        if file.filename == None:
+            return HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE)
+
+        contents = file.file.read()
+        imgId = hashlib.md5(contents).hexdigest()
+
+        for i in os.listdir("uploadImages"):
+            if imgId == i.split(".")[0]:
+                return {"imgId": imgId}
+
+        with open(f"./uploadImages/{imgId}.{file.filename.split('.')[1]}", "wb") as f:
+            f.write(contents)
+
+    except Exception:
+        return HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE)
+    finally:
+        file.file.close()
+    return {"imgId": imgId}
+
+
+@fastApp.get("/attachment/{imgId}")
+async def get_attachment(imgId, user: UserInDB = Depends(get_current_active_user)):
+    if imgId is None or imgId == "":
+        return
+
+    for i in os.listdir("uploadImages"):
+        if imgId == i.split(".")[0]:
+            return FileResponse(path=f"./uploadImages/{i}")
+
+
 @fastApp.websocket("/ws")
 async def chat_user(socket: WebSocket, token: str = Query(...)):
     try:
@@ -144,7 +193,9 @@ async def chat_user(socket: WebSocket, token: str = Query(...)):
     while True:
         try:
             data = await socket.receive_text()
-            print(f"Current User {current_user.username} {data}")
+            pd = json.loads(data)
+            pd["msg"] = hashlib.sha256(data.encode()).hexdigest()
+            print(f"Current User {current_user.username} {pd}")
             recData = json.loads(data)
             if (
                 ("to" not in recData)
@@ -165,7 +216,7 @@ async def chat_user(socket: WebSocket, token: str = Query(...)):
                     msgQueue.append(recData)
                 continue
 
-            print(json.dumps(recData))
+            # print(json.dumps(recData))
             await recSock.send_text(json.dumps(recData))
 
         except Exception as e:
@@ -189,10 +240,12 @@ async def check_msg_queue():
             print("te")
             await recSock.send_text(json.dumps(msgQueue[i]))
             sendedIndx.append(i)
-
-    for i in sendedIndx:
-        # error here
-        msgQueue.pop(i)
+    try:
+        for i in sendedIndx:
+            # error here
+            msgQueue.pop(i)
+    except Exception as e:
+        pass
 
 
 @fastApp.get("/{username}")
